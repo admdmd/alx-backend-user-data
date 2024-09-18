@@ -15,47 +15,51 @@ app = Flask(__name__)
 app.register_blueprint(app_views)
 CORS(app, resources={r"/api/v1/*": {"origins": "*"}})
 auth = None
-if os.getenv("AUTH_TYPE") == "basic_auth":
-    auth = BasicAuth()
-elif os.getenv("AUTH_TYPE") == "auth":
+auth_type = getenv('AUTH_TYPE', 'auth')
+if auth_type == 'auth':
     auth = Auth()
+if auth_type == 'basic_auth':
+    auth = BasicAuth()
 
 
 @app.errorhandler(404)
 def not_found(error) -> str:
-    """ Not found handler
+    """Not found handler.
     """
     return jsonify({"error": "Not found"}), 404
 
 
 @app.errorhandler(401)
 def unauthorized(error) -> str:
-    """
-    Unauthorized handler.
+    """Unauthorized handler.
     """
     return jsonify({"error": "Unauthorized"}), 401
 
 
 @app.errorhandler(403)
 def forbidden(error) -> str:
-    """ Forbidden handler.
+    """Forbidden handler.
     """
     return jsonify({"error": "Forbidden"}), 403
 
 
 @app.before_request
-def before():
-    """ Before request.
+def authenticate_user():
+    """Authenticates a user before processing a request.
     """
     if auth:
-        paths = ['/api/v1/status/',
-                 '/api/v1/unauthorized/', '/api/v1/forbidden/']
-        if not auth.require_auth(request.path, paths):
-            return
-        if not auth.authorization_header(request):
-            abort(401)
-        if not auth.current_user(request):
-            abort(403)
+        excluded_paths = [
+            '/api/v1/status/',
+            '/api/v1/unauthorized/',
+            '/api/v1/forbidden/',
+        ]
+        if auth.require_auth(request.path, excluded_paths):
+            auth_header = auth.authorization_header(request)
+            user = auth.current_user(request)
+            if auth_header is None:
+                abort(401)
+            if user is None:
+                abort(403)
 
 
 if __name__ == "__main__":
